@@ -1,0 +1,271 @@
+1.
+SELECT 
+    d.dept_name,
+    COUNT(e.emp_id) AS employee_count,
+    COALESCE(AVG(e.salary), 0) AS average_salary,
+    COALESCE(MIN(e.salary), 0) AS minimum_salary,
+    COALESCE(MAX(e.salary), 0) AS maximum_salary
+FROM Departments d
+LEFT JOIN Employees e
+    ON d.dept_id = e.dept_id
+GROUP BY d.dept_id, d.dept_name;
+
++-----------+---------------+---------------+---------------+---------------+
+| dept_name | COUNT(emp_id) | AVG(e.salary) | MIN(e.salary) | MAX(e.salary) |
++-----------+---------------+---------------+---------------+---------------+
+| IT        |             4 |  71750.000000 |      60000.00 |      90000.00 |
+| HR        |             3 |  66333.333333 |      55000.00 |      85000.00 |
+| Finance   |             3 |  75666.666667 |      62000.00 |      95000.00 |
+| Marketing |             2 |  69000.000000 |      58000.00 |      80000.00 |
+| Sales     |             3 |  72000.000000 |      60000.00 |      88000.00 |
++-----------+---------------+---------------+---------------+---------------+
+
+
+2.
+SELECT
+    emp_id,
+    emp_name,
+    dept_id,
+    salary
+FROM (
+    SELECT
+        emp_id,
+        emp_name,
+        dept_id,
+        salary,
+        DENSE_RANK() OVER (
+            PARTITION BY dept_id
+            ORDER BY salary DESC
+        ) AS rnk
+    FROM Employees
+) e
+WHERE rnk = 2;
+
++--------+---------+----------+
+| emp_id | dept_id | salary   |
++--------+---------+----------+
+|    112 |       1 | 72000.00 |
+|    115 |       2 | 59000.00 |
+|    114 |       3 | 70000.00 |
+|    110 |       4 | 58000.00 |
+|    113 |       5 | 68000.00 |
++--------+---------+----------+
+
+
+
+
+
+3.
+SELECT
+    e.emp_id,
+    e.emp_name,
+    e.dept_id,
+    e.salary
+FROM Employees e
+WHERE e.salary > (
+    SELECT AVG(e2.salary)
+    FROM Employees e2
+    WHERE e2.dept_id = e.dept_id
+);
+
++--------+---------+----------+--------------+
+| emp_id | dept_id | salary   | dept_avg     |
++--------+---------+----------+--------------+
+|    101 |       1 | 90000.00 | 71750.000000 |
+|    112 |       1 | 72000.00 | 71750.000000 |
+|    102 |       2 | 85000.00 | 66333.333333 |
+|    103 |       3 | 95000.00 | 75666.666667 |
+|    104 |       4 | 80000.00 | 69000.000000 |
+|    105 |       5 | 88000.00 | 72000.000000 |
++--------+---------+----------+--------------+
+
+4.
+SELECT
+    m.emp_id AS manager_id,
+    m.emp_name AS manager_name,
+    m.salary AS manager_salary,
+    COUNT(e.emp_id) AS direct_report_count,
+    SUM(e.salary) AS total_team_salary
+FROM Employees m
+JOIN Employees e
+    ON e.manager_id = m.emp_id
+GROUP BY
+    m.emp_id,
+    m.emp_name,
+    m.salary
+HAVING COUNT(e.emp_id) >= 2;
+
++---------------------+-------------+----------------+
+| direct_report_count | team_salary | manager_salary |
++---------------------+-------------+----------------+
+|                   3 |   270000.00 |       90000.00 |
+|                   2 |   170000.00 |       85000.00 |
+|                   2 |   190000.00 |       95000.00 |
+|                   2 |   176000.00 |       88000.00 |
++---------------------+-------------+----------------+
+
+5.
+SELECT
+    project_id,
+    emp_id,
+    total_hours,
+    rnk
+FROM (
+    SELECT
+        project_id,
+        emp_id,
+        SUM(hours_worked) AS total_hours,
+        DENSE_RANK() OVER (
+            PARTITION BY project_id
+            ORDER BY SUM(hours_worked) DESC
+        ) AS rnk
+    FROM EmployeeProjects
+    GROUP BY project_id, emp_id
+) x
+WHERE rnk <= 2;
++------------+--------+-------------+-----+
+| project_id | emp_id | total_hours | rnk |
++------------+--------+-------------+-----+
+|        201 |    106 |         180 |   1 |
+|        201 |    107 |         150 |   2 |
+|        202 |    108 |         160 |   1 |
+|        202 |    115 |         140 |   2 |
+|        203 |    109 |         200 |   1 |
+|        203 |    114 |         180 |   2 |
+|        204 |    110 |         170 |   1 |
+|        204 |    104 |         100 |   2 |
+|        205 |    111 |         190 |   1 |
+|        205 |    113 |         160 |   2 |
+|        206 |    106 |         220 |   1 |
+|        206 |    101 |         200 |   2 |
+|        207 |    108 |         180 |   1 |
+|        207 |    115 |         150 |   2 |
++------------+--------+-------------+-----+
+
+6.
+SELECT
+    d.dept_id,
+    d.dept_name
+FROM Departments d
+WHERE EXISTS (
+    SELECT 1
+    FROM Employees e
+    WHERE e.dept_id = d.dept_id
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM Projects p
+    WHERE p.dept_id = d.dept_id
+);
+
+7.
+SELECT
+    order_date,
+    daily_revenue,
+    SUM(daily_revenue) OVER (
+        ORDER BY order_date
+    ) AS cumulative_revenue
+FROM (
+    SELECT
+        order_date,
+        SUM(amount) AS daily_revenue
+    FROM Orders
+    WHERE status = 'Completed'
+    GROUP BY order_date
+) x
+ORDER BY order_date;
++------------+---------------+--------------------+
+| order_date | daily_revenue | cumulative_revenue |
++------------+---------------+--------------------+
+| 2025-01-05 |      15000.00 |           15000.00 |
+| 2025-01-10 |      22000.00 |           37000.00 |
+| 2025-02-02 |      12000.00 |           49000.00 |
+| 2025-02-18 |      27000.00 |           76000.00 |
+| 2025-03-12 |      45000.00 |          121000.00 |
+| 2025-03-20 |      21000.00 |          142000.00 |
+| 2025-04-15 |      28000.00 |          170000.00 |
+
+8.
+
+SELECT
+    customer_id,
+    completed_value,
+    CASE
+        WHEN completed_value >= 100000 THEN 'PLATINUM'
+        WHEN completed_value >= 50000 THEN 'GOLD'
+        WHEN completed_value >= 20000 THEN 'SILVER'
+        ELSE 'BRONZE'
+    END AS customer_class
+FROM (
+    SELECT
+        customer_id,
+        SUM(
+            CASE
+                WHEN status = 'Completed' THEN amount
+                ELSE 0
+            END
+        ) AS completed_value
+    FROM Orders
+    GROUP BY customer_id
+) x;
++-------------+-----------------+----------------+
+| customer_id | completed_value | customer_class |
++-------------+-----------------+----------------+
+|         501 |        55000.00 | GOLD           |
+|         502 |        22000.00 | SILVER         |
+|         503 |        21000.00 | SILVER         |
+|         504 |            0.00 | BRONZE         |
+|         505 |        27000.00 | SILVER         |
+|         506 |        45000.00 | SILVER         |
+|         507 |            0.00 | BRONZE         |
++-------------+-----------------+----------------+
+
+
+
+10.
+
+SELECT
+    d.dept_id,
+    d.dept_name,
+    e.emp_id,
+    e.emp_name,
+    e.salary,
+    CASE
+        WHEN e.salary = x.highest_salary THEN 'HIGHEST'
+        WHEN e.salary = x.lowest_salary THEN 'LOWEST'
+    END AS salary_type,
+    x.highest_salary - x.lowest_salary AS salary_difference
+FROM Employees e
+JOIN Departments d
+    ON e.dept_id = d.dept_id
+JOIN (
+    SELECT
+        dept_id,
+        MAX(salary) AS highest_salary,
+        MIN(salary) AS lowest_salary
+    FROM Employees
+    GROUP BY dept_id
+) x
+    ON e.dept_id = x.dept_id
+WHERE e.salary = x.highest_salary
+   OR e.salary = x.lowest_salary
+ORDER BY d.dept_id, e.salary DESC;
+
++---------+-----------+--------+----------+----------+-------------+-------------------+
+| dept_id | dept_name | emp_id | emp_name | salary   | salary_type | salary_difference |
++---------+-----------+--------+----------+----------+-------------+-------------------+
+|       1 | IT        |    101 | Rahul    | 90000.00 | HIGHEST     |          30000.00 |
+|       1 | IT        |    106 | Amit     | 60000.00 | LOWEST      |          30000.00 |
+|       2 | HR        |    102 | Priya    | 85000.00 | HIGHEST     |          30000.00 |
+|       2 | HR        |    108 | Ravi     | 55000.00 | LOWEST      |          30000.00 |
+|       3 | Finance   |    103 | Arjun    | 95000.00 | HIGHEST     |          33000.00 |
+|       3 | Finance   |    109 | Anjali   | 62000.00 | LOWEST      |          33000.00 |
+|       4 | Marketing |    104 | Sneha    | 80000.00 | HIGHEST     |          22000.00 |
+|       4 | Marketing |    110 | Vikram   | 58000.00 | LOWEST      |          22000.00 |
+|       5 | Sales     |    105 | Kiran    | 88000.00 | HIGHEST     |          28000.00 |
+|       5 | Sales     |    111 | Pooja    | 60000.00 | LOWEST      |          28000.00 |
++---------+-----------+--------+----------+----------+-------------+-------------------+
+
+
+
+
